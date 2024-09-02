@@ -1,14 +1,12 @@
 # Metar
 
 ## TODO
-* Add parsing tokens that represent good weather conditions (like *CAVOK*)
-* Document the code. Include domain knowledge about METAR.
-* Refactor function naming.
+* Document the code.
+* Reorganize funtions and spilt to several modules.
 * Add support for different METAR types (only US type is currently supported).
-* Add unit tests.
 * Add flight category determination (like *VFR*).
-* Split code into several modules?
-* Write description in the README file.
+* Write documentation in the README file.
+* Add unit tests.
 * **Add parsing other tokens**
 
 ## Installation

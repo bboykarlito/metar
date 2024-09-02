@@ -41,18 +41,20 @@ defmodule Metar do
     }
 
     tokens
-    |> Enum.slice(2..-1 // -1)
-    |> Enum.reduce(metar, &choose_parser/2)
+    |> Enum.slice(2..-1 // 1)
+    |> Enum.reduce(metar, &common_parser/2)
   end
 
   defp split_into_tokens(raw_metar) do
     Regex.split(~r{\s((?=\d\/\dSM)(?<!\s\d\s)|(?!\d\/\dSM))|=}, raw_metar)
   end
 
+  # In the token 250453Z, 25 - is the day of month
   defp extract_day(token) do
     token |> String.slice(0, 2)
   end
 
+  # In the token 250453Z, 04:53 - is the time of the observation (UTC)
   defp extract_time(token) do
     token
     |> String.slice(2, 4)
@@ -61,19 +63,20 @@ defmodule Metar do
     |> Enum.join(":")
   end
 
-  defp choose_parser(token, metar) do
+  defp common_parser(token, metar) do
     surface_wind_regex = ~r/^(VRB|000|[0-3]\d{2})(\d{2})G?(\d{2,3})?KT/
     wind_variations_regex = ~r/^(\d{3})V(\d{3})/
     visibility_regex = ~r/^(M)?(\d\s)?(\d\/)?(\dSM)/
-    clouds_regex = ~r/^(FEW|SCT|BKN|OVC)\d{3}/
+    clouds_regex = ~r/^(FEW|SCT|BKN|OVC|CLR|SKC|NSC|NCD)/
     temp_regex = ~r/^(M)?(\d+\/\d+)/
 
     data = cond do
-      String.match?(token, surface_wind_regex) -> extract_wind_data(token)
-      String.match?(token, wind_variations_regex) -> extract_wind_variations_data(token)
-      String.match?(token, visibility_regex) -> extract_visib_data(token)
-      String.match?(token, clouds_regex) -> extract_clouds_data(token)
-      String.match?(token, temp_regex) -> extract_temp_data(token)
+      String.match?(token, surface_wind_regex) -> extract_wind(token)
+      String.match?(token, wind_variations_regex) -> extract_wind_variations(token)
+      String.match?(token, visibility_regex) -> extract_visib(token)
+      String.match?(token, clouds_regex) -> extract_clouds(token)
+      String.match?(token, temp_regex) -> extract_temp_and_dev_point(token)
+      token == "CAVOK" -> extract_cavok(token)
       true -> %{}
     end
 
@@ -84,8 +87,8 @@ defmodule Metar do
     end
   end
 
-  # 20011G20KT
-  defp extract_wind_data(token) do
+  # From 20011G20KT: dir 200 deg, speed 11 kt, gust 20 kt
+  defp extract_wind(token) do
     extract_wind_speed_and_gust(token)
     |> Map.put(:wdir, extract_wind_direction(token))
   end
@@ -99,7 +102,7 @@ defmodule Metar do
 
   defp extract_wind_speed_and_gust(token) do
     token
-    |> String.slice(3..-3 // -1)
+    |> String.slice(3..-3 // 1)
     |> String.split("G")
     |> case do
       [spd | []] -> %{wspd: spd}
@@ -107,7 +110,7 @@ defmodule Metar do
     end
   end
 
-  defp extract_wind_variations_data(token) do
+  defp extract_wind_variations(token) do
     [min, max] =
       token
       |> String.split("V")
@@ -115,11 +118,11 @@ defmodule Metar do
     %{vwdir_min: min, vwdir_max: max}
   end
 
-  # 1 1/2SM
-  defp extract_visib_data(token) do
+  # 1 1/2SM (Statute Miles)
+  defp extract_visib(token) do
     visib =
       token
-      |> String.slice(0..-3 // -1)
+      |> String.slice(0..-3 // 1)
       |> string_sm_value_to_float()
       |> sm_to_meters()
       |> round()
@@ -161,15 +164,17 @@ defmodule Metar do
     end
   end
 
-  defp extract_clouds_data(token) do
+  defp extract_clouds(token) do
     {cover, base} =
       token
       |> String.split_at(3)
 
-    [%{cover: cover, base: String.to_integer(base) * 100}]
+    base = if String.equivalent?(base, ""),
+      do: nil, else: String.to_integer(base) * 100
+    [%{cover: cover, base: base}]
   end
 
-  defp extract_temp_data(token) do
+  defp extract_temp_and_dev_point(token) do
     [temp, dev_point] =
       token
       |> String.trim("M")
@@ -177,5 +182,10 @@ defmodule Metar do
       |> Enum.map(&String.to_integer/1)
 
     %{temp: temp, devp: dev_point}
+  end
+
+  # CAVOK means visib is over 10 km
+  defp extract_cavok(token) do
+    %{visib: 9999, clouds: [%{cover: token, base: nil}]}
   end
 end
