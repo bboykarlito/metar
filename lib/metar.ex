@@ -10,8 +10,10 @@ defmodule Metar do
     :wspd,
     :wgst,
     :visib,
-    :temp, # air tempreature
-    :devp, # dev point
+    # air tempreature
+    :temp,
+    # dev point
+    :devp,
     clouds: []
   ]
 
@@ -28,7 +30,9 @@ defmodule Metar do
       :world
 
   """
-  def decode(raw_metar \\ "KMCI 250453Z 20011KT 1 1/2SM CLR 31/21 A2982 RMK AO2 SLP084 T03060211") do
+  def decode(
+        raw_metar \\ "KMCI 250453Z 20011KT 1 1/2SM FEW2000 BKN3000 31/21 A2982 RMK AO2 SLP084 T03060211"
+      ) do
     tokens = split_into_tokens(raw_metar)
 
     IO.puts("Tokens: #{Enum.join(tokens, ", ")}")
@@ -40,9 +44,7 @@ defmodule Metar do
       time: extract_time(Enum.at(tokens, 1))
     }
 
-    tokens
-    |> Enum.slice(2..-1 // 1)
-    |> Enum.reduce(metar, &common_parser/2)
+    Map.merge(metar, Enum.reduce(tokens, %{}, &decode_token/2))
   end
 
   defp split_into_tokens(raw_metar) do
@@ -63,28 +65,25 @@ defmodule Metar do
     |> Enum.join(":")
   end
 
-  defp common_parser(token, metar) do
+  defp decode_token(token, metar) do
     surface_wind_regex = ~r/^(VRB|000|[0-3]\d{2})(\d{2})G?(\d{2,3})?KT/
     wind_variations_regex = ~r/^(\d{3})V(\d{3})/
     visibility_regex = ~r/^(M)?(\d\s)?(\d\/)?(\dSM)/
     clouds_regex = ~r/^(FEW|SCT|BKN|OVC|CLR|SKC|NSC|NCD)/
     temp_regex = ~r/^(M)?(\d+\/\d+)/
 
-    data = cond do
-      String.match?(token, surface_wind_regex) -> extract_wind(token)
-      String.match?(token, wind_variations_regex) -> extract_wind_variations(token)
-      String.match?(token, visibility_regex) -> extract_visib(token)
-      String.match?(token, clouds_regex) -> extract_clouds(token)
-      String.match?(token, temp_regex) -> extract_temp_and_dev_point(token)
-      token == "CAVOK" -> extract_cavok(token)
-      true -> %{}
-    end
+    data =
+      cond do
+        String.match?(token, surface_wind_regex) -> extract_wind(token)
+        String.match?(token, wind_variations_regex) -> extract_wind_variations(token)
+        String.match?(token, visibility_regex) -> extract_visib(token)
+        String.match?(token, clouds_regex) -> extract_and_add_clouds(token, metar[:clouds])
+        String.match?(token, temp_regex) -> extract_temp_and_dev_point(token)
+        token == "CAVOK" -> extract_cavok(token)
+        true -> %{}
+      end
 
-    if is_list(data) do
-      %{metar | clouds: metar.clouds ++ data}
-    else
-      Map.merge(metar, data)
-    end
+    Map.merge(metar, data)
   end
 
   # From 20011G20KT: dir 200 deg, speed 11 kt, gust 20 kt
@@ -102,7 +101,7 @@ defmodule Metar do
 
   defp extract_wind_speed_and_gust(token) do
     token
-    |> String.slice(3..-3 // 1)
+    |> String.slice(3..-3//1)
     |> String.split("G")
     |> case do
       [spd | []] -> %{wspd: spd}
@@ -122,7 +121,7 @@ defmodule Metar do
   defp extract_visib(token) do
     visib =
       token
-      |> String.slice(0..-3 // 1)
+      |> String.slice(0..-3//1)
       |> string_sm_value_to_float()
       |> sm_to_meters()
       |> round()
@@ -136,9 +135,11 @@ defmodule Metar do
     |> String.split(" ")
     |> case do
       [value | []] ->
-        String.contains?(value, "/") && fraction_to_float(value) ||
+        (String.contains?(value, "/") && fraction_to_float(value)) ||
           String.to_integer(value) * 1.0
-      [int | [fraction]] -> String.to_integer(int) + fraction_to_float(fraction)
+
+      [int | [fraction]] ->
+        String.to_integer(int) + fraction_to_float(fraction)
     end
   end
 
@@ -158,10 +159,18 @@ defmodule Metar do
   defp apply_metar_visib_rules(visib) do
     cond do
       visib < 800 -> visib - Integer.mod(visib, 50)
-      visib >= 800 and visib < 5000  -> visib - Integer.mod(visib, 100)
+      visib >= 800 and visib < 5000 -> visib - Integer.mod(visib, 100)
       visib >= 5000 and visib < 10_000 -> visib - Integer.mod(visib, 1000)
       true -> 9999
     end
+  end
+
+  defp extract_and_add_clouds(token, nil) do
+    %{clouds: extract_clouds(token)}
+  end
+
+  defp extract_and_add_clouds(token, existing_clouds) do
+    %{clouds: existing_clouds ++ extract_clouds(token)}
   end
 
   defp extract_clouds(token) do
@@ -169,8 +178,7 @@ defmodule Metar do
       token
       |> String.split_at(3)
 
-    base = if String.equivalent?(base, ""),
-      do: nil, else: String.to_integer(base) * 100
+    base = if String.equivalent?(base, ""), do: nil, else: String.to_integer(base) * 100
     [%{cover: cover, base: base}]
   end
 
