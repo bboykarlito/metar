@@ -9,6 +9,7 @@ defmodule Metar do
     :vwdir_max,
     :wspd,
     :wgst,
+    :wunits,
     :visib,
     # air tempreature
     :temp,
@@ -31,7 +32,7 @@ defmodule Metar do
 
   """
   def decode(
-        raw_metar \\ "KMCI 250453Z 20011KT 1 1/2SM FEW2000 BKN3000 31/21 A2982 RMK AO2 SLP084 T03060211"
+        raw_metar \\ "KMCI 250453Z 20011MPS 1 1/2SM FEW2000 BKN3000 31/21 A2982 RMK AO2 SLP084 T03060211"
       ) do
     tokens = split_into_tokens(raw_metar)
 
@@ -66,7 +67,7 @@ defmodule Metar do
   end
 
   defp decode_token(token, metar) do
-    surface_wind_regex = ~r/^(VRB|000|[0-3]\d{2})(\d{2})G?(\d{2,3})?KT/
+    wind_regex = ~r/^(VRB|\d{3})\d{2}G?(\d{2})?(MPS|KT)/
     wind_variations_regex = ~r/^(\d{3})V(\d{3})/
     visibility_regex = ~r/^(M)?(\d\s)?(\d\/)?(\dSM)/
     clouds_regex = ~r/^(FEW|SCT|BKN|OVC|CLR|SKC|NSC|NCD)/
@@ -74,7 +75,7 @@ defmodule Metar do
 
     data =
       cond do
-        String.match?(token, surface_wind_regex) -> extract_wind(token)
+        String.match?(token, wind_regex) -> extract_wind(token)
         String.match?(token, wind_variations_regex) -> extract_wind_variations(token)
         String.match?(token, visibility_regex) -> extract_visib(token)
         String.match?(token, clouds_regex) -> extract_and_add_clouds(token, metar[:clouds])
@@ -88,8 +89,9 @@ defmodule Metar do
 
   # From 20011G20KT: dir 200 deg, speed 11 kt, gust 20 kt
   defp extract_wind(token) do
-    extract_wind_speed_and_gust(token)
+    %{}
     |> Map.put(:wdir, extract_wind_direction(token))
+    |> Map.merge(extract_wind_speed(token))
   end
 
   defp extract_wind_direction(token) do
@@ -99,14 +101,21 @@ defmodule Metar do
     end
   end
 
-  defp extract_wind_speed_and_gust(token) do
+  defp extract_wind_speed(token) do
     token
-    |> String.slice(3..-3//1)
+    |> String.slice(3..-1//1)
     |> String.split("G")
-    |> case do
-      [spd | []] -> %{wspd: spd}
-      [spd, gst] -> %{wspd: spd, wgst: gst}
-    end
+    |> extract_wind_speed_parts()
+  end
+
+  defp extract_wind_speed_parts([mean_speed_part]) do
+    {mean_speed, units} = String.split_at(mean_speed_part, 2)
+    %{wspd: mean_speed, wunits: units}
+  end
+
+  defp extract_wind_speed_parts([mean_speed, gust_speed_part]) do
+    {gust_speed, units} = String.split_at(gust_speed_part, 2)
+    %{wspd: mean_speed, wgst: gust_speed, wunits: units}
   end
 
   defp extract_wind_variations(token) do

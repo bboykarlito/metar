@@ -4,6 +4,9 @@
 * Document the code.
 * Reorganize funtions and spilt to several modules.
 * Add support for different METAR types (only US type is currently supported).
+  - Handle P or ABV for wind speed more then 50 m/s or 100kt
+  - Visibility can be in meters
+* Can be several Visibility values for different directions
 * Add flight category determination (like *VFR*).
 * Write documentation in the README file.
 * Add unit tests.
