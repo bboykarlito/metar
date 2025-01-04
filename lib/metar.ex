@@ -23,7 +23,7 @@ defmodule Metar do
   """
 
   @doc """
-  decode/1 function for decodeing raw metar strings. Returns Metar structure with raw metar and extracted values:
+  Decodes raw metar strings. Returns Metar structure with raw metar and extracted values:
 
   * **raw**: raw METAR string
   * **station**: ICAO code of the airport, which reported the METAR
@@ -75,7 +75,7 @@ defmodule Metar do
   end
 
   @doc """
-  split_into_tokens/1 splits raw METAR string into tokens that represent some value.
+  Splits raw METAR string into tokens that represent some value.
 
   ## Example
 
