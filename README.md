@@ -1,9 +1,8 @@
 # Metar
 
 ## TODO
-* Currently, on prevailing visibility is parsed. Several Visibility values for different directions should be added.
+* Currently, only prevailing visibility is parsed. Several Visibility values for different directions should be added.
 * Add flight category determination (like *VFR*).
-* Write documentation in the README file.
 * Add unit tests.
 * **Add parsing other tokens**
 
